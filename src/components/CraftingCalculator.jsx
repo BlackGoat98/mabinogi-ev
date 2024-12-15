@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { 
   Container, 
   Paper, 
@@ -17,7 +18,11 @@ import {
   Grid,
   IconButton,
   Autocomplete,
-  TextField
+  TextField,
+  AppBar,
+  Toolbar,
+  Tabs,
+  Tab
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
@@ -33,6 +38,7 @@ const CraftingCalculator = () => {
     '2랭크': false,
     '3랭크': false
   });
+  const [currentTab, setCurrentTab] = useState(0); // 현재 선택된 메뉴 상태
 
   const toolsData = {
     '찬란': chanranData,
@@ -42,7 +48,11 @@ const CraftingCalculator = () => {
 
   // 옵션 추가
   const addOption = () => {
-    setSelectedOptions([...selectedOptions, { option: '', level: '' }]);
+    if (selectedOptions.length < 3) { // 현재 선택된 옵션 개수가 3개 미만일 때만 추가
+      setSelectedOptions([...selectedOptions, { option: '', level: '' }]);
+    } else {
+      alert("최대 3개의 옵션만 추가할 수 있습니다."); // 사용자에게 알림
+    }
   };
 
   // 옵션 제거
@@ -126,11 +136,9 @@ const CraftingCalculator = () => {
 
   // 확률 계산 함수
   const getTotalProbability = (toolData, itemType, race, rank, selectedOptions)  => {
-
-    // 등장 확률 계산 ( 듀얼, 트리플의 경우 1번 옵션만 가지고 하면 된다. )
-    const { option, level } = selectedOptions[0]; 
+    const { option, _ } = selectedOptions[0]; 
     const selectedOptionCount = selectedOptions.length; // 유저 선택 옵션 개수
-    const allOptionCount = toolData[option][itemType][race][rank]['개수'] // 등장 확률 계산
+    const allOptionCount = toolData[option][itemType][race][rank]['개수']; // 등장 확률 계산
     let totalOptionProbability = combination(allOptionCount - selectedOptionCount, 3 - selectedOptionCount) / combination(allOptionCount, 3);
 
     // 레벨 확률 계산
@@ -139,8 +147,7 @@ const CraftingCalculator = () => {
       const { option, level } = selected;
       const levelProbs = toolData[option]?.[itemType]?.[race]?.[rank]?.['레벨별확률'];
       
-      if (!levelProbs)
-        return 0;
+      if (!levelProbs) return 0;
       let levelProbability = 0;
       Object.entries(levelProbs).forEach(([lvl, prob]) => {
         if (Number(lvl) >= Number(level)) {
@@ -190,6 +197,12 @@ const CraftingCalculator = () => {
     return allResults.sort((a, b) => a.expectedTries - b.expectedTries);
   };
 
+  // 컴포넌트가 처음 렌더링될 때 옵션을 추가합니다.
+  useEffect(() => {
+    addOption();
+  }, []); // 빈 배열을 전달하여 초기 렌더링 시에만 호출
+
+  // selectedOptions가 변경될 때마다 결과를 계산합니다.
   useEffect(() => {
     const calculatedResults = calculateAllCombinations();
     setResults(calculatedResults);
@@ -197,162 +210,200 @@ const CraftingCalculator = () => {
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4 }}>
-      <Paper elevation={3} sx={{ p: 3 }}>
-        <Typography variant="h4" align="center" gutterBottom>
-          마비노기 세공 기댓값 계산기
-        </Typography>
-
-        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
-          <FormGroup row>
-            {Object.keys(visibleRanks).map(rank => (
-              <FormControlLabel
-                key={rank}
-                control={
-                  <Checkbox
-                    checked={visibleRanks[rank]}
-                    onChange={(e) => setVisibleRanks(prev => ({
-                      ...prev,
-                      [rank]: e.target.checked
-                    }))}
-                  />
-                }
-                label={rank}
-              />
-            ))}
-          </FormGroup>
-        </Box>
-
-        <Container maxWidth="md" sx={{ mb: 3 }}>
-          {selectedOptions.map((selected, index) => (
-            <Grid 
-              container 
-              spacing={2} 
-              key={index} 
-              sx={{ mb: 2 }} 
-              alignItems="center"
-              justifyContent="center"
-            >
-              <Grid item xs={12} sm={7}>
-                <Autocomplete
-                  value={selected.option}
-                  onChange={(_, newValue) => updateOption(index, 'option', newValue)}
-                  options={getAllOptions().filter(option => 
-                    // 이미 선택된 옵션 제외
-                    !selectedOptions.some((selected, i) => 
-                      i !== index && selected.option === option
-                    )
-                  )}
-                  renderInput={(params) => (
-                    <TextField 
-                      {...params} 
-                      label="옵션 선택" 
-                      placeholder="옵션을 입력하세요"
-                    />
-                  )}
-                  isOptionEqualToValue={(option, value) => option === value}
-                  filterOptions={(options, { inputValue }) => {
-                    return options.filter(option =>
-                      option.toLowerCase().includes(inputValue.toLowerCase())
-                    );
-                  }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={3}>
-                <Autocomplete
-                  value={selected.level}
-                  onChange={(_, newValue) => updateOption(index, 'level', newValue)}
-                  options={selected.option ? getAvailableLevels(selected.option) : []}
-                  disabled={!selected.option}
-                  renderInput={(params) => (
-                    <TextField 
-                      {...params} 
-                      label="레벨 선택" 
-                      placeholder="레벨을 입력하세요"
-                    />
-                  )}
-                  isOptionEqualToValue={(option, value) => option === value}
-                  renderOption={(props, option) => (
-                    <li {...props}>{option} 레벨 이상</li>
-                  )}
-                  getOptionLabel={(option) => option ? `${option} 레벨 이상` : ''}
-                  filterOptions={(options, { inputValue }) => {
-                    // 입력에서 '레벨 이상' 문자열 제거하고 숫자만 추출
-                    const searchValue = inputValue.replace(/레벨\s*이상/g, '').trim();
-                    
-                    return options.filter(option => 
-                      option.toString().includes(searchValue)
-                    );
-                  }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={2}>
-                <IconButton 
-                  onClick={() => removeOption(index)} 
-                  color="error"
-                  sx={{ display: 'flex', margin: '0 auto' }}
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </Grid>
-            </Grid>
-          ))}
-          
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+      <AppBar position="static" sx={{ backgroundColor: '#333333' }}>
+        <Toolbar>
+          <Tabs value={currentTab} onChange={(event, newValue) => setCurrentTab(newValue)}>
+            <Tab label="기댓값 계산기" sx={{ color: '#ffffff' }} />
+            <Tab label="" sx={{ color: '#ffffff' }} disabled />
+            <Tab label="" sx={{ color: '#ffffff' }} disabled />
+            <Tab label="" sx={{ color: '#ffffff' }} disabled />
+            <Tab label="" sx={{ color: '#ffffff' }} disabled />
+            <Tab label="" sx={{ color: '#ffffff' }} disabled />
+            <Tab label="" sx={{ color: '#ffffff' }} disabled />
+            <Tab label="" sx={{ color: '#ffffff' }} disabled />
+            <Tab label="" sx={{ color: '#ffffff' }} disabled />
+            <Tab label="" sx={{ color: '#ffffff' }} disabled />
+            <Tab label="" sx={{ color: '#ffffff' }} disabled />
             <Button 
-              startIcon={<AddIcon />}
-              onClick={addOption}
-              variant="outlined"
+              color="inherit" 
+              onClick={() => window.open("https://mabinogi.nexon.com/ItemShop/metalware_new.asp?tooltype=5050005_1", "_blank")}
             >
-              옵션 추가
+              확률 정보
             </Button>
-          </Box>
-        </Container>
+          </Tabs>
+        </Toolbar>
+      </AppBar>
 
-        {/* 결과 테이블 */}
-        {results.length > 0 && (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>세공 도구</TableCell>
-                  <TableCell>아이템 부위</TableCell>
-                  <TableCell>착용 가능 종족</TableCell>
-                  <TableCell>세공 랭크</TableCell>
-                  <TableCell align="right">등장 확률(3줄)</TableCell>
-                  <TableCell align="right">평균 시도 횟수</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(() => {
-                  const filteredResults = results.filter(result => visibleRanks[result.rank]);                  
-                  return filteredResults.map((result, index) => (
-                    <TableRow key={index}>
-                      <TableCell>{result.tool}</TableCell>
-                      <TableCell>{result.itemType}</TableCell>
-                      <TableCell>{result.race}</TableCell>
-                      <TableCell>{result.rank}</TableCell>
-                      <TableCell align="right">
-                        {(result.probability * 100).toFixed(4)}%
-                      </TableCell>
-                      <TableCell align="right">
-                        {Math.floor(result.expectedTries).toLocaleString()}회
-                      </TableCell>
-                    </TableRow>
-                  ));
-                })()}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
-
-        {selectedOptions.length > 0 && results.length === 0 && (
-          <Typography color="error" sx={{ mt: 2 }}>
-            선택한 옵션 조합이 가능한 아이템이 없습니다.
+      {currentTab === 0 && ( // 기댓값 계산기 메뉴
+        <Paper elevation={3} sx={{ p: 3 }}>
+          <Typography variant="h4" align="center" gutterBottom>
+            마비노기 세공 기댓값 계산기
           </Typography>
-        )}
-      </Paper>
+
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+            <FormGroup row>
+              {Object.keys(visibleRanks).map(rank => (
+                <FormControlLabel
+                  key={rank}
+                  control={
+                    <Checkbox
+                      checked={visibleRanks[rank]}
+                      onChange={(e) => setVisibleRanks(prev => ({
+                        ...prev,
+                        [rank]: e.target.checked
+                      }))}
+                    />
+                  }
+                  label={rank}
+                />
+              ))}
+            </FormGroup>
+          </Box>
+
+          <Container maxWidth="md" sx={{ mb: 3 }}>
+            {selectedOptions.map((selected, index) => (
+              <Grid 
+                container 
+                spacing={2} 
+                key={index} 
+                sx={{ mb: 2 }} 
+                alignItems="center"
+                justifyContent="center"
+              >
+                <Grid item xs={12} sm={7}>
+                  <Autocomplete
+                    value={selected.option}
+                    onChange={(_, newValue) => updateOption(index, 'option', newValue)}
+                    options={getAllOptions().filter(option => 
+                      // 이미 선택된 옵션 제외
+                      !selectedOptions.some((selected, i) => 
+                        i !== index && selected.option === option
+                      )
+                    )}
+                    renderInput={(params) => (
+                      <TextField 
+                        {...params} 
+                        label="옵션 선택" 
+                        placeholder="옵션을 입력하세요"
+                      />
+                    )}
+                    isOptionEqualToValue={(option, value) => option === value}
+                    filterOptions={(options, { inputValue }) => {
+                      return options.filter(option =>
+                        option.toLowerCase().includes(inputValue.toLowerCase())
+                      );
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Autocomplete
+                    value={selected.level}
+                    onChange={(_, newValue) => updateOption(index, 'level', newValue)}
+                    options={selected.option ? getAvailableLevels(selected.option) : []}
+                    disabled={!selected.option}
+                    renderInput={(params) => (
+                      <TextField 
+                        {...params} 
+                        label="레벨 선택" 
+                        placeholder="레벨을 입력하세요"
+                      />
+                    )}
+                    isOptionEqualToValue={(option, value) => option === value}
+                    renderOption={(props, option) => (
+                      <li {...props}>{option} 레벨 이상</li>
+                    )}
+                    getOptionLabel={(option) => option ? `${option} 레벨 이상` : ''}
+                    filterOptions={(options, { inputValue }) => {
+                      // 입력에서 '레벨 이상' 문자열 제거하고 숫자만 추출
+                      const searchValue = inputValue.replace(/레벨\s*이상/g, '').trim();
+                      
+                      return options.filter(option => 
+                        option.toString().includes(searchValue)
+                      );
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={2}>
+                  <IconButton 
+                    onClick={() => removeOption(index)} 
+                    color="error"
+                    sx={{ display: 'flex', margin: '0 auto' }}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </Grid>
+              </Grid>
+            ))}
+            
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+              <Button 
+                startIcon={<AddIcon />}
+                onClick={addOption}
+                variant="outlined"
+              >
+                옵션 추가
+              </Button>
+            </Box>
+          </Container>
+
+          {/* 결과 테이블 */}
+          {results.length > 0 && (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>세공 도구</TableCell>
+                    <TableCell>아이템 부위</TableCell>
+                    <TableCell>착용 가능 종족</TableCell>
+                    <TableCell>세공 랭크</TableCell>
+                    <TableCell align="right">등장 확률(3줄)</TableCell>
+                    <TableCell align="right">평균 시도 횟수</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(() => {
+                    const filteredResults = results.filter(result => visibleRanks[result.rank]);                  
+                    return filteredResults.map((result, index) => (
+                      <TableRow key={index}>
+                        <TableCell>{result.tool}</TableCell>
+                        <TableCell>{result.itemType}</TableCell>
+                        <TableCell>{result.race}</TableCell>
+                        <TableCell>{result.rank}</TableCell>
+                        <TableCell align="right">
+                          {(result.probability * 100).toFixed(4)}%
+                        </TableCell>
+                        <TableCell align="right">
+                          {Math.floor(result.expectedTries).toLocaleString()}회
+                        </TableCell>
+                      </TableRow>
+                    ));
+                  })()}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+
+          {selectedOptions.length > 0 && results.length === 0 && (
+            <Typography color="error" sx={{ mt: 2 }}>
+              선택한 옵션 조합이 가능한 아이템이 없습니다.
+            </Typography>
+          )}
+        </Paper>
+      )}
+
+      <Typography variant="body2" align="center" sx={{ color: 'text.secondary', mt: 2 }}>
+        This Page is not associated with NEXON Korea.
+      </Typography>
     </Container>
   );
+};
+
+// PropTypes 추가
+CraftingCalculator.propTypes = {
+  selectedOptions: PropTypes.array,
+  results: PropTypes.array,
+  visibleRanks: PropTypes.object,
+  currentTab: PropTypes.number,
 };
 
 export default CraftingCalculator;
